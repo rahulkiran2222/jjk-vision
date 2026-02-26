@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JJK Vision | Master Edition</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Syncopate:wght@700&display=swap" rel="stylesheet">
+    <style>
+        body { margin: 0; background: #000; color: white; font-family: 'Syncopate', sans-serif; overflow: hidden; }
+        
+        /* Camera PIP - Top Right */
+        #pip_container { 
+            position: absolute; top: 20px; right: 20px; 
+            width: 300px; height: 210px; 
+            border: 3px solid #00d4ff; border-radius: 12px;
+            overflow: hidden; z-index: 100; box-shadow: 0 0 20px #00d4ff;
+        }
+        #pip_canvas { transform: scaleX(-1); width: 100%; height: 100%; }
+        video { display: none; }
+
+        /* Main FX */
+        #fx_canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; }
+
+        /* Instructions Guide */
+        #guide {
+            position: absolute; top: 20px; left: 20px;
+            width: 320px; background: rgba(0,0,0,0.85);
+            padding: 20px; border-radius: 10px; border-left: 6px solid #00d4ff; z-index: 10;
+        }
+        .step { margin-bottom: 20px; font-size: 11px; font-family: sans-serif; letter-spacing: 1px; line-height: 1.4; }
+        .step b { color: #00d4ff; font-size: 14px; font-family: 'Syncopate'; display: block; margin-bottom: 5px; }
+        .step.active { background: rgba(0, 212, 255, 0.25); border-radius: 6px; padding: 8px; }
+
+        #label_container {
+            position: absolute; bottom: 60px; width: 100%;
+            text-align: center; z-index: 10;
+        }
+        #tech_name { font-size: 50px; text-shadow: 0 0 30px #00d4ff; color: #fff; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+<div id="pip_container">
+    <video id="input_video"></video>
+    <canvas id="pip_canvas"></canvas>
+</div>
+
+<div id="guide">
+    <h1>JUJUTSUKAISAN #GOJO</h1>
+    <h2 style="font-size: 18px; margin-top: 0; border-bottom: 1px solid #444; padding-bottom: 10px;">TECHNIQUE INPUTS</h2>
+    <div id="g1" class="step"><b>1. UNLIMITED VOID</b>Show Peace Sign (Index & Middle fingers UP).</div>
+    <div id="g2" class="step"><b>2. TECHNIQUE: RED</b>Show Rock-on / Yo (Thumb, Index, Pinky UP).</div>
+    <div id="g3" class="step"><b>3. HOLLOW PURPLE</b>Show Open Palm (All 5 fingers open).</div>
+    <div id="g4" class="step"><b>4. MALEVOLENT SHRINE</b>Show BOTH Palms Open (All 10 fingers).</div>
+</div>
+
+<canvas id="fx_canvas"></canvas>
+
+<div id="label_container">
+    <div id="tech_name">RESONATING...</div>
+</div>
+
+<script>
+const videoElement = document.getElementById('input_video');
+const pipCanvas = document.getElementById('pip_canvas');
+const pipCtx = pipCanvas.getContext('2d');
+const fxCanvas = document.getElementById('fx_canvas');
+const fxCtx = fxCanvas.getContext('2d');
+const techName = document.getElementById('tech_name');
+
+let rotation = 0;
+
+function onResults(results) {
+    fxCanvas.width = window.innerWidth;
+    fxCanvas.height = window.innerHeight;
+    pipCanvas.width = videoElement.videoWidth;
+    pipCanvas.height = videoElement.videoHeight;
+
+    pipCtx.save();
+    pipCtx.clearRect(0, 0, pipCanvas.width, pipCanvas.height);
+    pipCtx.drawImage(results.image, 0, 0, pipCanvas.width, pipCanvas.height);
+    
+    let activeTech = "NONE";
+
+    if (results.multiHandLandmarks) {
+        let hands = results.multiHandLandmarks.map(landmarks => {
+            drawConnectors(pipCtx, landmarks, HAND_CONNECTIONS, {color: '#00d4ff', lineWidth: 4});
+            drawLandmarks(pipCtx, landmarks, {color: '#fff', lineWidth: 1, radius: 2});
+
+            // Logic: Is finger up? (Tip above PIP)
+            return {
+                index: landmarks[8].y < landmarks[6].y,
+                middle: landmarks[12].y < landmarks[10].y,
+                ring: landmarks[16].y < landmarks[14].y,
+                pinky: landmarks[20].y < landmarks[18].y,
+                thumb: landmarks[4].y < landmarks[2].y
+            };
+        });
+
+        // GESTURE ENGINE
+        if (hands.length === 2) {
+            // SHRINE: Both hands open palm
+            if (hands[0].index && hands[0].pinky && hands[1].index && hands[1].pinky) {
+                activeTech = "SHRINE";
+            }
+        } else if (hands.length === 1) {
+            const h = hands[0];
+            const allFive = h.index && h.middle && h.ring && h.pinky;
+            
+            // PURPLE: Open Palm
+            if (allFive) {
+                activeTech = "PURPLE";
+            }
+            // RED: Yo Signal (Thumb, Index, Pinky)
+            else if (h.thumb && h.index && h.pinky && !h.middle && !h.ring) {
+                activeTech = "RED";
+            }
+            // VOID: Peace sign (Index, Middle)
+            else if (h.index && h.middle && !h.ring && !h.pinky) {
+                activeTech = "VOID";
+            }
+        }
+    }
+    pipCtx.restore();
+    renderFX(activeTech);
+}
+
+function renderFX(tech) {
+    const w = fxCanvas.width;
+    const h = fxCanvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    rotation += 0.05;
+
+    fxCtx.clearRect(0, 0, w, h);
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+
+    if (tech === "NONE") {
+        techName.innerText = "DETECTING CURSED ENERGY...";
+        techName.style.color = "#fff";
+        return;
+    }
+
+    if (tech === "VOID") {
+        document.getElementById('g1').classList.add('active');
+        drawGlobe(cx, cy, 260, "#0066ff", "UNLIMITED VOID");
+        fxCtx.globalCompositeOperation = 'difference';
+        fxCtx.fillStyle = 'white';
+        fxCtx.fillRect(0,0,w,h);
+        fxCtx.globalCompositeOperation = 'source-over';
+    } 
+    else if (tech === "RED") {
+        document.getElementById('g2').classList.add('active');
+        drawGlobe(cx, cy, 130, "#ff0000", "REVERSAL: RED");
+    }
+    else if (tech === "PURPLE") {
+        document.getElementById('g3').classList.add('active');
+        drawGlobe(cx, cy, 210, "#a000ff", "HOLLOW PURPLE");
+        // Gravity particles
+        for(let i=0; i<15; i++) {
+            let r = 300 - ((rotation*100 + i*20)%300);
+            fxCtx.fillStyle = "#fff";
+            fxCtx.beginPath();
+            fxCtx.arc(cx + Math.cos(i)*r, cy + Math.sin(i)*r, 2, 0, 7);
+            fxCtx.fill();
+        }
+    }
+    else if (tech === "SHRINE") {
+        document.getElementById('g4').classList.add('active');
+        drawGlobe(cx, cy, 360, "#ff4400", "MALEVOLENT SHRINE");
+        fxCtx.strokeStyle = "rgba(255,255,255,0.7)";
+        for(let i=0; i<6; i++) {
+            fxCtx.beginPath();
+            fxCtx.moveTo(Math.random()*w, 0); fxCtx.lineTo(Math.random()*w, h);
+            fxCtx.stroke();
+        }
+    }
+}
+
+function drawGlobe(x, y, radius, color, name) {
+    techName.innerText = name;
+    techName.style.color = color;
+
+    const g = fxCtx.createRadialGradient(x, y, 0, x, y, radius);
+    g.addColorStop(0, '#fff');
+    g.addColorStop(0.2, color);
+    g.addColorStop(1, 'transparent');
+
+    fxCtx.fillStyle = g;
+    fxCtx.beginPath();
+    fxCtx.arc(x, y, radius + Math.sin(rotation*3)*15, 0, Math.PI*2);
+    fxCtx.fill();
+
+    fxCtx.strokeStyle = "white";
+    fxCtx.lineWidth = 3;
+    for(let i=0; i<3; i++) {
+        fxCtx.beginPath();
+        fxCtx.ellipse(x, y, radius, radius/3, rotation + (i*Math.PI/3), 0, Math.PI*2);
+        fxCtx.stroke();
+    }
+}
+
+const hands = new Hands({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`});
+hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.7, minTrackingConfidence: 0.7 });
+hands.onResults(onResults);
+
+const camera = new Camera(videoElement, {
+    onFrame: async () => { await hands.send({image: videoElement}); },
+    width: 640, height: 480
+});
+camera.start();
+</script>
+</body>
+</html>
