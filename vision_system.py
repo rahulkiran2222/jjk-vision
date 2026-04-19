@@ -1,3 +1,21 @@
+# Add these imports at the TOP of the file:
+import math
+import json
+
+# In the analyze_frame() method, add PURPLE detection
+# AFTER the VOID check and BEFORE returning:
+
+# 4. LOGIC: HOLLOW PURPLE (All fingers open, one hand)
+is_all_open = (
+    hand_lms.landmark[8].y < hand_lms.landmark[6].y and
+    hand_lms.landmark[12].y < hand_lms.landmark[10].y and
+    hand_lms.landmark[16].y < hand_lms.landmark[14].y and
+    hand_lms.landmark[20].y < hand_lms.landmark[18].y
+)
+if is_all_open:
+    output.update(self.build_json("PURPLE", center, 0.90))
+    return output, self.apply_visuals(frame, "PURPLE")
+
 import cv2
 import mediapipe as mp
 # ADD THESE TWO LINES DIRECTLY:
